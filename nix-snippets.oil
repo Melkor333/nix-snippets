@@ -1,0 +1,84 @@
+#!/usr/bin/env oil
+
+### TODO: Tests!
+### TODO: Maybe define a Nix-Snippet standard and allow other snippet sources (from github & co)
+setglobal SOURCES = [ './snippets/' ]
+setglobal IGNOREFILE = 'ignores'
+setglobal IMPORTFILE = '/etc/nixos/snippets.nix'
+setglobal DESTINATION = '/etc/nixos/snippets'
+setglobal SUDO = 'sudo'
+
+proc getSnippet (path, :snippet) {
+  var fileName = ${path##*/}
+  var snippetName = ${fileName%.*}
+  var newFile = $DESTINATION ++ "/" ++ $fileName
+  var status = ''
+  var fileDiff = ''
+  try test -f $path
+  if (_status !== 0) {
+    return 1
+  }
+
+  #try test -f $newFile
+  if ! test -f $newFile {
+    setvar status = "new"
+  } else {
+    #
+    var lastLine = $(tail -1 $newFile)
+    if (lastLine ~ "#ignored") {
+      setvar status = "ignored"
+    } else {
+      # TODO: Lint both files before diffing them to minimize diff
+      setvar fileDiff = $(diff --suppress-common-lines --suppress-blank-empty -twB $path $newFile)
+      if test -z $fileDiff {
+        setvar status = "uptodate"
+      } else {
+        setvar status = "diff"
+      }
+    }
+  }
+  var s = { name: $snippetName,
+                     path: $path,
+                     newFile: $newFile,
+                     status: $status }
+  if test -n $fileDiff { setvar s['diff'] = $fileDiff }
+  setref snippet = s
+}
+
+proc getSnippets (:snippetsOut) {
+  ### List all Snippets which can be added to the config
+  # Under the hood:
+  # find all lines containing milkos.NAME.enable and return a list containing dicts
+  # Snippet dict contains:
+  # name -> Obvious
+  # path -> A hash of the configuration
+  # state -> string of either: new, ignored, uptodate or diff
+  #       -> new: Is not implemented in the config
+  #       -> ignored: Has been looked at once, don't want to see it again (e.g. has been implemented
+  #       -> uptodate: Is currently used and the same as
+  #       -> diff: is currently used, but there is a diff to the config in use
+  # newFile -> path to a new file
+  # Optional: A diff
+  var fileList = %()
+  var snippets = []
+  for source in @SOURCES {
+    setvar fileList = fileList ++ %($source/*nix)
+  }
+  for file in @fileList {
+    runproc getSnippet $file :snippet
+    setvar snippets = snippets + [snippet]
+  }
+  setref snippetsOut = snippets
+}
+
+proc list {
+  ### List all existing snippets (which aren't ignored)
+  getSnippets :snippets
+  for snippet in (snippets) {
+    if (snippet->status !== 'ignored') {
+      write -- "$[snippet->name]: $[snippet->status]"
+    }
+  }
+}
+
+runproc @ARGV
