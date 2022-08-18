@@ -4,7 +4,7 @@
 ### TODO: Maybe define a Nix-Snippet standard and allow other snippet sources (from github & co)
 setglobal SOURCES = [ './snippets/' ]
 setglobal IGNOREFILE = 'ignores'
-setglobal IMPORTFILE = '/etc/nixos/snippets.nix'
+setglobal IMPORTFILE = '/etc/nixos/snippets/default.nix'
 setglobal DESTINATION = '/etc/nixos/snippets'
 setglobal SUDO = 'sudo'
 
@@ -78,6 +78,103 @@ proc list {
     if (snippet->status !== 'ignored') {
       write -- "$[snippet->name]: $[snippet->status]"
     }
+  }
+}
+
+proc testInit (:initStatus) {
+  ### test if snippets is already configured and if there are errors
+  var status = {}
+  # TODO use a block and unset errexit as soon as possible
+  try grep -q $DESTINATION /etc/nixos/configuration.nix
+  setvar status->import = _status
+  try test -d $DESTINATION
+  setvar status->dir = _status
+  try test -f "$IMPORTFILE"
+  setvar status->file = _status
+
+  setvar status->overall = true;
+  for key, val in (status) {
+    # Be aware we can't use "false" because 1 is true in python and 0 is false
+    if (val === 1) {
+      setvar status->overall = false;
+      break
+    }
+  }
+  setref initStatus = status
+}
+
+proc init {
+  ### Initialize snippet by setting up the proper files
+  testInit :status
+  if (status->overall) {
+    write "nix-snippet is already set up :)"
+    return
+  }
+  if (status->import === 1) {
+    write "Adding import statement to /etc/nixos/configuration.nix"
+    # This way we keep all indentations
+    read --all :_content < /etc/nixos/configuration.nix
+    var content = _content.split($'\n')
+    # Todo: document ${#x[@]}
+    var i = 0
+    { while (i < len(content)) {
+        var line = content[i]
+        # TODO: This currently *only* matches 'imports = [' and 'imports =' , but not .e.g. 'imports = [ something ]'
+        #if (line ~ / <s*> 'imports' s* '=' s* '[' /) {
+        #  write $line
+        #  write "$[_match(1)] $IMPORTFILE"
+        #  exit
+        #} el
+        if (line ~ / <s*> 'imports' s* '=' /) {
+          write $line
+          setvar i += 1
+          write $[content[i]] # print the line containing '['
+          write "$[_match(1)]    $IMPORTFILE"
+        } else {
+          write $line
+        }
+        setvar i += 1
+      }
+    } > ./configuration.nix.tmp
+    # TODO: For some reason this just *prints* both files. wtf
+    try diff "/etc/nixos/configuration.nix" "./configuration.nix.tmp"
+    if (_status !== 0) {
+      var input = "N"
+      # TODO: Because of a bug a loop only works one iteration in Oil 0.11.0. With a eggex-var it works twice, yey!
+      var regex = / %start [ "yY" ] /
+      while (input !~ regex) {
+        write -n "Can these changes be applied to /etc/nixos/configuration.nix? [y/n] "
+        # POINTER
+        read --line input
+        write $input
+        if (input ~ / %start ["nN"] /) {
+          write "Aborting."
+          exit 1
+        }
+      }
+      # TODO: Make versionized backup or datesuffixed
+      if test -f "/etc/nixos/configuration.nix_nixsnippet_backup" {
+        write "There is a already a nixos backup file. Remove this file to init again: /etc/nixos/configuration.nix_nixsnippet_backup"
+        exit 1
+      }
+      $SUDO cp /etc/nixos/configuration.nix /etc/nixos/configuration.nix_nixsnippet_backup
+      $SUDO mv ./configuration.nix.tmp /etc/nixos/configuration.nix
+    }
+  } else {
+    write "1. $IMPORTFILE already included"
+  }
+  if (status->dir === 1) {
+    write "creating folder $DESTINATION"
+    $SUDO mkdir -p $DESTINATION
+  } else {
+    write "2. $DESTINATION already exists"
+  }
+  if (status->file === 1) {
+    write "Creating file $IMPORTFILE"
+    # TODO: make sure this works after packaging
+    $SUDO cp $_this_dir/src/default.nix.template $IMPORTFILE
+  } else {
+    write "3. $IMPORTFILE already exists"
   }
 }
 

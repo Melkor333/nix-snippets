@@ -10,6 +10,7 @@ On a side note: `nix-snippet` is written in [oil shell](https://www.oilshell.org
 ## TODOs before v1
 
 - [x] `nix-snippet list`
+- [x] `nix-snippet init`
 - [ ] `nix-snippet apply SNIPPET` (or `add`, not sure if `apply` makes sense)
 - [ ] `nix-snippet remove SNIPPET`
 - [ ] `nix-snippet diff SNIPPET`
@@ -54,35 +55,9 @@ It's still in development, but once finished the workflow should roughly be:
 
 # Setup
 
-TODO: Create command "init" which makes everything necessary to use nix-snippets
-
-Create a folder `/etc/nixos/snippets/` and in there you want to create a file `default.nix` looking like this:
-```
-{
-  config,
-  pkgs,
-  ...
-}:
-{
-  imports =
-    [
-    ];
-}
-```
-
-Then you want to import this file in your `configuration.nix`
-
-```
-{
-  ...
-  imports =
-    [
-    ...
-    ./snippets
-    ];
-  ...
-}
-```
+First run `nix-shell` in this folder to have all required dependencies (it's ugly but it works "tm").
+Run the command `./nix-snippet.oil init` to initialize the repository.
+This will add an `imports` statement in your `/etc/nixos/configuration.nix`, and a file (+folder) `/etc/nixos/snippets/default.nix`.
 
 # Snippet guide
 
