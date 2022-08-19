@@ -8,6 +8,32 @@ setglobal IMPORTFILE = '/etc/nixos/snippets/default.nix'
 setglobal DESTINATION = '/etc/nixos/snippets'
 setglobal SUDO = 'sudo'
 
+# Nix specific Functions
+#--------------------------------------------------------------------------------
+proc testInit (:initStatus) {
+  ### test if snippets is already configured and if there are errors
+  var status = {}
+  # TODO use a block and unset errexit as soon as possible
+  try grep -q $DESTINATION /etc/nixos/configuration.nix
+  setvar status->import = _status
+  try test -d $DESTINATION
+  setvar status->dir = _status
+  try test -f "$IMPORTFILE"
+  setvar status->file = _status
+
+  setvar status->overall = true;
+  for key, val in (status) {
+    # Be aware we can't use "false" because 1 is true in python and 0 is false
+    if (val === 1) {
+      setvar status->overall = false;
+      break
+    }
+  }
+  setref initStatus = status
+}
+
+# Single Snippet Functions
+#--------------------------------------------------------------------------------
 proc getSnippet (path, :snippet) {
   var fileName = ${path##*/}
   var snippetName = ${fileName%.*}
@@ -71,6 +97,8 @@ proc getSnippets (:snippetsOut) {
   setref snippetsOut = snippets
 }
 
+# Command Wrappers
+#--------------------------------------------------------------------------------
 proc list {
   ### List all existing snippets (which aren't ignored)
   getSnippets :snippets
@@ -79,28 +107,6 @@ proc list {
       write -- "$[snippet->name]: $[snippet->status]"
     }
   }
-}
-
-proc testInit (:initStatus) {
-  ### test if snippets is already configured and if there are errors
-  var status = {}
-  # TODO use a block and unset errexit as soon as possible
-  try grep -q $DESTINATION /etc/nixos/configuration.nix
-  setvar status->import = _status
-  try test -d $DESTINATION
-  setvar status->dir = _status
-  try test -f "$IMPORTFILE"
-  setvar status->file = _status
-
-  setvar status->overall = true;
-  for key, val in (status) {
-    # Be aware we can't use "false" because 1 is true in python and 0 is false
-    if (val === 1) {
-      setvar status->overall = false;
-      break
-    }
-  }
-  setref initStatus = status
 }
 
 proc init {
