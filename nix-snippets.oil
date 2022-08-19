@@ -7,6 +7,7 @@ setglobal IGNOREFILE = 'ignores'
 setglobal IMPORTFILE = '/etc/nixos/snippets/default.nix'
 setglobal DESTINATION = '/etc/nixos/snippets'
 setglobal SUDO = 'sudo'
+setglobal DIFF = 'diff'
 
 # Nix specific Functions
 #--------------------------------------------------------------------------------
@@ -30,6 +31,60 @@ proc testInit (:initStatus) {
     }
   }
   setref initStatus = status
+}
+
+proc addImport (path, importedFile) {
+  write "Adding import statement to $path"
+  # This way we keep all indentations
+  read --all :_content < $path
+  var tempFile = $(mktemp)
+  var content = _content.split($'\n')
+  var i = 0
+  {
+    while (i < len(content)) {
+      var line = content[i]
+      # TODO: This currently *only* matches 'imports = [' and 'imports =' , but not .e.g. 'imports = [ something ]'
+      #if (line ~ / <s*> 'imports' s* '=' s* '[' /) {
+      #  write $line
+      #  write "$[_match(1)] $importedFile"
+      #} el
+      if (line ~ / <s*> 'imports' s* '=' /) {
+        write $line
+        setvar i += 1
+        write $[content[i]] # print the line containing '['
+        write "$[_match(1)]    $importedFile"
+      } else {
+        write $line
+      }
+      setvar i += 1
+    }
+  } > $tempFile
+  try $DIFF $path $tempFile
+  if (_status !== 0) {
+    var input = "N"
+    # TODO: put this var directly in the comparison
+    # Because of a bug a loop only works one iteration in Oil 0.12.0. With a eggex-var it works twice, yey!
+    var regex = / %start [ "yY" ] /
+    while (input !~ regex) {
+      write -n "Can these changes be applied to $path? [y/n] "
+      read --line input
+      if (input ~ / %start ["nN"] /) {
+        write "Aborting because changes shouldn't be applied to $path."
+        exit 1
+      }
+    }
+    var backupfile = "${path}.bak.$(date +%y%m%d-%H%M)"
+    if test -f $backupfile {
+      write "There is a already a nixos backup file. Remove this file or try again in a minute: $backupfile"
+      exit 1
+    }
+    $SUDO cp $path $backupfile
+    $SUDO mv $tempFile $path
+  } else {
+    write "For some reason trying to add '$importedFile' to $path doesn't make any difference!!"
+    rm $tempFile
+    exit 1
+  }
 }
 
 # Single Snippet Functions
@@ -117,55 +172,7 @@ proc init {
     return
   }
   if (status->import === 1) {
-    write "Adding import statement to /etc/nixos/configuration.nix"
-    # This way we keep all indentations
-    read --all :_content < /etc/nixos/configuration.nix
-    var content = _content.split($'\n')
-    # Todo: document ${#x[@]}
-    var i = 0
-    { while (i < len(content)) {
-        var line = content[i]
-        # TODO: This currently *only* matches 'imports = [' and 'imports =' , but not .e.g. 'imports = [ something ]'
-        #if (line ~ / <s*> 'imports' s* '=' s* '[' /) {
-        #  write $line
-        #  write "$[_match(1)] $IMPORTFILE"
-        #  exit
-        #} el
-        if (line ~ / <s*> 'imports' s* '=' /) {
-          write $line
-          setvar i += 1
-          write $[content[i]] # print the line containing '['
-          write "$[_match(1)]    $IMPORTFILE"
-        } else {
-          write $line
-        }
-        setvar i += 1
-      }
-    } > ./configuration.nix.tmp
-    # TODO: For some reason this just *prints* both files. wtf
-    try diff "/etc/nixos/configuration.nix" "./configuration.nix.tmp"
-    if (_status !== 0) {
-      var input = "N"
-      # TODO: Because of a bug a loop only works one iteration in Oil 0.11.0. With a eggex-var it works twice, yey!
-      var regex = / %start [ "yY" ] /
-      while (input !~ regex) {
-        write -n "Can these changes be applied to /etc/nixos/configuration.nix? [y/n] "
-        # POINTER
-        read --line input
-        write $input
-        if (input ~ / %start ["nN"] /) {
-          write "Aborting."
-          exit 1
-        }
-      }
-      # TODO: Make versionized backup or datesuffixed
-      if test -f "/etc/nixos/configuration.nix_nixsnippet_backup" {
-        write "There is a already a nixos backup file. Remove this file to init again: /etc/nixos/configuration.nix_nixsnippet_backup"
-        exit 1
-      }
-      $SUDO cp /etc/nixos/configuration.nix /etc/nixos/configuration.nix_nixsnippet_backup
-      $SUDO mv ./configuration.nix.tmp /etc/nixos/configuration.nix
-    }
+    addImport /etc/nixos/configuration.nix "$IMPORTFILE"
   } else {
     write "1. $IMPORTFILE already included"
   }
