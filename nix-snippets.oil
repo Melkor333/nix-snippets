@@ -6,8 +6,47 @@ setglobal SOURCES = [ './snippets/' ]
 setglobal IGNOREFILE = 'ignores'
 setglobal IMPORTFILE = '/etc/nixos/snippets/default.nix'
 setglobal DESTINATION = '/etc/nixos/snippets'
-setglobal SUDO = 'sudo'
-setglobal DIFF = 'diff'
+setglobal SUDO = %(sudo)
+setglobal DIFF = %(diff --color --)
+
+# Printing help functions
+#--------------------------------------------------------------------------------
+# If we have the utility "rich-cli" installed, we can use [fontification] lateron (I'm too tired of figuring out \esomecrap)
+try command -v rich > /dev/null
+if (_status === 0) {
+  setglobal RICH_ENABLED = true
+  setglobal RICH = %(rich -p)
+  proc info (text) {
+    @RICH "[magenta]$text"
+  }
+  proc success (text) {
+    @RICH "[green]$text"
+  }
+  proc fail (text) {
+    @RICH "[red bold]$text"
+    exit 1
+  }
+  proc abort (text) {
+    @RICH "[magenta bold]$text"
+    exit 1
+  }
+} else {
+  setglobal RICH_ENABLED = false
+  proc info (text) {
+    echo -e "\\e[36m$text\\e[0m"
+  }
+  proc success (text) {
+    echo -e "\\e[32m$text\\e[0m"
+  }
+  proc fail (text) {
+    echo -e "\\e[31m$text\\e[0m"
+    exit 1
+  }
+  proc abort (text) {
+    echo -e "\\e[35m$text\\e[0m"
+    exit 1
+  }
+}
 
 # Nix specific Functions
 #--------------------------------------------------------------------------------
@@ -34,7 +73,7 @@ proc testInit (:initStatus) {
 }
 
 proc addImport (path, importedFile) {
-  write "Adding import statement to $path"
+  info "Adding import statement to $path"
   # This way we keep all indentations
   read --all :_content < $path
   var tempFile = $(mktemp)
@@ -59,31 +98,29 @@ proc addImport (path, importedFile) {
       setvar i += 1
     }
   } > $tempFile
-  try $DIFF $path $tempFile
+  try @DIFF $path $tempFile
   if (_status !== 0) {
     var input = "N"
     # TODO: put this var directly in the comparison
     # Because of a bug a loop only works one iteration in Oil 0.12.0. With a eggex-var it works twice, yey!
     var regex = / %start [ "yY" ] /
     while (input !~ regex) {
-      write -n "Can these changes be applied to $path? [y/n] "
+      info -n "Can these changes be applied to $path? [y/n] "
       read --line input
       if (input ~ / %start ["nN"] /) {
-        write "Aborting because changes shouldn't be applied to $path."
+        info "Aborting because changes shouldn't be applied to $path."
         exit 1
       }
     }
     var backupfile = "${path}.bak.$(date +%y%m%d-%H%M)"
     if test -f $backupfile {
-      write "There is a already a nixos backup file. Remove this file or try again in a minute: $backupfile"
-      exit 1
+      abort "There is a already a nixos backup file. Remove this file or try again in a minute: $backupfile"
     }
-    $SUDO cp $path $backupfile
-    $SUDO mv $tempFile $path
+    @SUDO cp $path $backupfile
+    @SUDO mv $tempFile $path
   } else {
-    write "For some reason trying to add '$importedFile' to $path doesn't make any difference!!"
     rm $tempFile
-    exit 1
+    fail "For some reason trying to add '$importedFile' to $path doesn't make any difference!!"
   }
 }
 
@@ -159,7 +196,11 @@ proc list {
   getSnippets :snippets
   for snippet in (snippets) {
     if (snippet->status !== 'ignored') {
-      write -- "$[snippet->name]: $[snippet->status]"
+      if (RICH_ENABLED) {
+        success "[bold]$[snippet->name]: [/bold]$[snippet->status]"
+      } else {
+        success "$[snippet->name]: $[snippet->status]"
+      }
     }
   }
 }
