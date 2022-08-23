@@ -178,13 +178,13 @@ proc getSnippets (:snippetsOut) {
   # newFile -> path to a new file
   # Optional: A diff
   var fileList = %()
-  var snippets = []
+  var snippets = {}
   for source in @SOURCES {
     setvar fileList = fileList ++ %($source/*nix)
   }
   for file in @fileList {
     runproc getSnippet $file :snippet
-    setvar snippets = snippets + [snippet]
+    setvar snippets[snippet->name] = snippet
   }
   setref snippetsOut = snippets
 }
@@ -194,7 +194,7 @@ proc getSnippets (:snippetsOut) {
 proc list {
   ### List all existing snippets (which aren't ignored)
   getSnippets :snippets
-  for snippet in (snippets) {
+  for _, snippet in (snippets) {
     if (snippet->status !== 'ignored') {
       if (RICH_ENABLED) {
         success "[bold]$[snippet->name]: [/bold]$[snippet->status]"

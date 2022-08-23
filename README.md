@@ -16,13 +16,14 @@ On a side note: `nix-snippet` is written in [oil shell](https://www.oilshell.org
 - [ ] `nix-snippet diff SNIPPET`
 - [ ] `nix-snippet ignore SNIPPET`
 - [ ] Come up with an idea for placeholders in snippets
+- [ ] Add examples / pictures in this README
+- [ ] Document some included snippets in a separate README (for additional tooling like `npkg`, `nur`, `home-manager`...)
 - [ ] create a package (and add to NixOS)
 - [ ] some way of defining snippet sources (maybe something like to `nix-channel`). Currently only snippets in this repo work
   - [ ] A definition of how a source has to look like
   - [ ] `nix-snippet update`
   - [ ] `nix-snippet source add`
   - [ ] `nix-snippet source remove`
-
 
 # Idea
 
@@ -71,3 +72,4 @@ nvim: new
 # Future ideas
 
 - [ ] Meta snippets/bundles (snippets which involve other snippets)
+- [ ] Tooling to initialize and write new snippets
