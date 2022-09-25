@@ -1,0 +1,70 @@
+#!/usr/bin/env oil
+
+proc oilparse(params, args, :out, :helpString) {
+  ### Reads a dict of param[eter]s and a string args, which is parsed
+  json read :params <<< $(echo $params)
+  # Generate some arrays to make simple "if arg in array" lateron
+  var _out = {}
+
+  # Split up into flags and positionals
+  var flags = {}
+  var positionals = []
+  for param in (params) {
+    if (param.get('short', false) !== false) {
+      setvar flags[param->short] = param
+    }
+    if (param.get('long', false) !== false) {
+      setvar flags[param->long] = param
+    }
+    if (param.get('positional', false) !== false) {
+      _ positionals.append(param)
+    }
+  }
+
+  var count = 0
+  var poscount = 0
+  var param_name = ""
+  setvar args = (split(args, ' '))
+  while (count < len(args)) {
+    var arg = args[count]
+    var param = ""
+    if (arg ~ / '-' word $ / and arg[1:] in flags) {
+      setvar param = (flags[arg[1:]])
+      setvar param_name = "$[param.get('name', param.get('long', param->short))]"
+      setvar count += 1
+
+    } elif (arg ~ / '--' word+ $ / and arg[2:] in flags) {
+      setvar param = (flags[arg[2:]])
+      setvar param_name = (param.get('name', param.get('long', param->short)))
+      setvar count += 1
+
+    } else {
+      if (poscount >= len(positionals)) {
+        echo "too many positionals!"
+        exit 1
+      }
+      setvar param_name = (positionals[poscount].get('name', positionals[poscount]->positional))
+      setvar poscount += 1
+    }
+    setvar _out[param_name] = args[count]
+    setvar count += 1
+  }
+  # TODOS:
+  # - Generate the helpstring
+  # - Parse args
+  # - implement some kind of type checking (path, asolutePath, string, number, etc.)
+  setref out = _out
+}
+
+proc test {
+  var params = [ { name: 'pref', short: 'd', long: 'destination', help: 'destination of for new snippets', type: 'path' },
+  { short: 'p', long: 'prefix', help: 'Prefix for all paths (e.g. for testing)', type: 'path' },
+  { positional: 'snippetName', help: 'The name of the snippet', type: 'string' }]
+
+  oilparse "$(json write (params))" "--destination /destination -p PREFIX test" :args :help
+  = args
+}
+
+# For testing right now
+# TODO: Remove
+runproc @ARGV
